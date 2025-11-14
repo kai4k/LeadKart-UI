@@ -1,0 +1,188 @@
+import user1 from "@/assets/images/avatar/user-1.png";
+import user2 from "@/assets/images/avatar/user-2.png";
+import user3 from "@/assets/images/avatar/user-3.png";
+import user4 from "@/assets/images/avatar/user-4.png";
+import user5 from "@/assets/images/avatar/user-5.png";
+import user6 from "@/assets/images/avatar/user-6.png";
+import user7 from "@/assets/images/avatar/user-7.png";
+import user8 from "@/assets/images/avatar/user-8.png";
+import user9 from "@/assets/images/avatar/user-9.png";
+import user10 from "@/assets/images/avatar/user-10.png";
+import user11 from "@/assets/images/avatar/user-11.png";
+import user12 from "@/assets/images/avatar/user-12.png";
+import user13 from "@/assets/images/avatar/user-13.png";
+import user14 from "@/assets/images/avatar/user-14.png";
+import { ref } from "vue";
+
+export interface Teacher {
+  teacherID?: string;
+  teacherName: string;
+  image?: string;
+  email: string;
+  phone: string;
+  salary: string;
+  experience: string;
+  title: string;
+  date: string;
+  avatarText?: string;
+  formattedDate?: string;
+  lastSchool: string;
+}
+
+const teachersData = ref<Teacher[]>([
+  {
+    teacherName: "John Doe",
+    image: user1,
+    email: "john@example.com",
+    phone: "1234567890",
+    salary: "50,000",
+    experience: "10",
+    title: "Teacher",
+    date: "2024-07-15",
+    lastSchool: "ABC High School",
+  },
+  {
+    teacherName: "Jane Smith",
+    image: user2,
+    email: "jane@example.com",
+    phone: "1234567891",
+    salary: "55,000",
+    experience: "8",
+    title: "Professor",
+    date: "2024-07-14",
+    lastSchool: "XYZ University",
+  },
+  {
+    teacherName: "Michael Johnson",
+    image: user3,
+    email: "michael@example.com",
+    phone: "1234567892",
+    salary: "60,000",
+    experience: "12",
+    title: "Assistant",
+    date: "2024-07-13",
+    lastSchool: "LMN College",
+  },
+  {
+    teacherName: "Emily Davis",
+    image: user4,
+    email: "davis@example.com",
+    phone: "1234567893",
+    salary: "52,000",
+    experience: "9",
+    title: "Lecturer",
+    date: "2024-07-12",
+    lastSchool: "PQR Institute",
+  },
+  {
+    teacherName: "James Brown",
+    image: user5,
+    email: "james@example.com",
+    phone: "1234567894",
+    salary: "48,000",
+    experience: "7",
+    title: "Instructor",
+    date: "2024-07-11",
+    lastSchool: "EFG School",
+  },
+  {
+    teacherName: "Patricia Wilson",
+    image: user6,
+    email: "patricia@example.com",
+    phone: "1234567895",
+    salary: "54,000",
+    experience: "11",
+    title: "Senior Lecturer",
+    date: "2024-07-10",
+    lastSchool: "HIJ Academy",
+  },
+  {
+    teacherName: "Robert Martinez",
+    image: user7,
+    email: "martinez@example.com",
+    phone: "1234567896",
+    salary: "58,000",
+    experience: "15",
+    title: "Associate Professor",
+    date: "2024-07-09",
+    lastSchool: "KLM University",
+  },
+  {
+    teacherName: "Linda Anderson",
+    image: user8,
+    email: "anderson@example.com",
+    phone: "1234567897",
+    salary: "51,000",
+    experience: "10",
+    title: "Lecturer",
+    date: "2024-07-08",
+    lastSchool: "NOP College",
+  },
+  {
+    teacherName: "Thomas Lee",
+    image: user9,
+    email: "thomas@example.com",
+    phone: "1234567898",
+    salary: "57,000",
+    experience: "13",
+    title: "Professor",
+    date: "2024-07-07",
+    lastSchool: "QRS Institute",
+  },
+  {
+    teacherName: "Barbara Hernandez",
+    image: user10,
+    email: "barbara@example.com",
+    phone: "1234567899",
+    salary: "53,000",
+    experience: "9",
+    title: "Senior Lecturer",
+    date: "2024-07-06",
+    lastSchool: "TUV School",
+  },
+  {
+    teacherName: "Christopher White",
+    image: user11,
+    email: "white@example.com",
+    phone: "1234567810",
+    salary: "49,000",
+    experience: "6",
+    title: "Assistant Professor",
+    date: "2024-07-05",
+    lastSchool: "WXY Academy",
+  },
+  {
+    teacherName: "Nancy Harris",
+    image: user12,
+    email: "nancy@example.com",
+    phone: "1234567811",
+    salary: "56,000",
+    experience: "12",
+    title: "Associate Professor",
+    date: "2024-07-04",
+    lastSchool: "ZAB University",
+  },
+  {
+    teacherName: "Kevin Clark",
+    image: user13,
+    email: "kevin@example.com",
+    phone: "1234567812",
+    salary: "61,000",
+    experience: "14",
+    title: "Professor",
+    date: "2024-07-03",
+    lastSchool: "CDE College",
+  },
+  {
+    teacherName: "Sarah Lewis",
+    image: user14,
+    email: "lewis@example.com",
+    phone: "1234567813",
+    salary: "50,000",
+    experience: "8",
+    title: "Instructor",
+    date: "2024-07-02",
+    lastSchool: "FGH School",
+  },
+]);
+export { teachersData };

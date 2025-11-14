@@ -1,0 +1,16 @@
+/*
+Template Name: Domiex - Admin & Dashboard Template
+Author: SRBThemes
+Version: 1.0.0
+File: plugins scss files
+*/
+
+@layer base {
+    @import 'simplebar-vue/dist/simplebar.min.css';
+    @import 'swiper/swiper-bundle.css';
+    @import 'virtual-select-plugin/dist/virtual-select.min.css';
+    @import 'nouislider/dist/nouislider.css';
+    @import 'quill/dist/quill.snow.css';
+    @import 'flatpickr/dist/flatpickr.css';
+    @import 'jsvectormap/dist/jsvectormap.css';
+}
