@@ -1,0 +1,89 @@
+<script setup lang="ts">
+import { ref } from "vue";
+import { validateForm, confirmPassword, password, errors } from "./password-validation";
+import { Eye, EyeOff, MoveRight } from "lucide-vue-next";
+const showPassword = ref<boolean>(false);
+const showConfirmPassword = ref<boolean>(false)
+</script>
+<template>
+    <div class="relative flex items-center justify-center min-h-screen py-12 bg-center bg-cover bg-[url('../images/others/auth.jpg')]">
+        <div class="absolute inset-0 bg-gray-950/50"></div>
+        <div class="container relative">
+            <div class="grid grid-cols-12">
+                <div
+                    class="col-span-12 mb-0 border-none shadow-none md:col-span-10 lg:col-span-6 xl:col-span-4 md:col-start-2 lg:col-start-4 xl:col-start-5 card bg-white/10 backdrop-blur-md">
+                    <div class="md:p-10 card-body">
+                        <div class="mb-5 text-center">
+                            <router-link to="#!">
+                                <img src="@/assets/images/logo-white.png" alt="" class="h-8 mx-auto" />
+                            </router-link>
+                        </div>
+                        <h4 class="mb-2 leading-relaxed text-center text-white">
+                            Set your new password
+                        </h4>
+                        <p class="mb-5 text-center text-white/75">
+                            Ensure that your new password is different from any passwords
+                            you've previously used.
+                        </p>
+                        <form @submit.prevent="validateForm">
+                            <div class="grid grid-cols-12 gap-4 mt-5">
+                                <div class="col-span-12">
+                                    <div>
+                                        <label for="passwordInput" class="form-label text-white/75">Password</label>
+                                        <div class="relative">
+                                            <input :type="showPassword ? 'text' : 'password'" id="passwordInput"
+                                                class="text-white border-none ltr:pr-8 rtl:pl-8 form-input bg-white/10 placeholder:text-white/75"
+                                                placeholder="Enter your password" v-model="password" />
+                                            <button type="button" @click="showPassword = !showPassword"
+                                                class="absolute inset-y-0 flex items-center text-gray-500 ltr:right-3 rtl:left-3 focus:outline-none">
+                                                <Eye v-if="showPassword" class="size-5"></Eye>
+                                                <EyeOff v-else class="size-5"></EyeOff>
+                                            </button>
+                                        </div>
+                                        <p v-if="errors.password" class="text-sm text-red-500">
+                                            {{ errors.password }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="col-span-12">
+                                    <div>
+                                        <label for="confirmPasswordInput" class="form-label text-white/75">Confirm
+                                            Password</label>
+                                        <div class="relative">
+                                            <input :type="showConfirmPassword ? 'text' : 'password'"
+                                                id="confirmPasswordInput"
+                                                class="text-white border-none ltr:pr-8 rtl:pl-8 form-input bg-white/10 placeholder:text-white/75"
+                                                placeholder="Enter your confirm password" v-model="confirmPassword" />
+                                            <button type="button" @click="showConfirmPassword = !showConfirmPassword"
+                                                class="absolute inset-y-0 flex items-center text-gray-500 ltr:right-3 rtl:left-3 focus:outline-none">
+                                                <Eye v-if="showConfirmPassword" class="size-5"></Eye>
+                                                <EyeOff v-else class="size-5"></EyeOff>
+                                            </button>
+                                        </div>
+                                        <p v-if="errors.confirmPassword" class="text-sm text-red-500">
+                                            {{ errors.confirmPassword }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="col-span-12">
+                                    <button type="submit"
+                                        class="w-full px-4 py-2 text-white rounded-md bg-primary-500 hover:bg-primary-600">
+                                        Set Password
+                                    </button>
+                                    <p class="mt-3 text-center text-white/75">
+                                        Return to the
+                                        <router-link to="auth-signin-modern"
+                                            class="font-medium underline link text-white/75 hover:text-white">
+                                            <span class="mr-1 align-middle">Sign In</span>
+                                            <MoveRight class="inline-block ml-1 size-4"></MoveRight>
+                                        </router-link>
+                                    </p>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
