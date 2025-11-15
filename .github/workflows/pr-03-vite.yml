@@ -1,0 +1,68 @@
+name: PR 03 — Vite bundling & budgets
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr03:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Vite config and budgets
+        run: |
+          set -euo pipefail
+
+          cat > vite.config.ts <<'EOF'
+          import { defineConfig } from 'vite'
+          import vue from '@vitejs/plugin-vue'
+          import tailwindcss from '@tailwindcss/vite'
+          import { visualizer } from 'rollup-plugin-visualizer'
+
+          export default defineConfig({
+            plugins: [tailwindcss(), vue(), visualizer({ filename: 'dist/stats.html', open: false })],
+            build: {
+              sourcemap: false,
+              rollupOptions: {
+                output: {
+                  manualChunks: {
+                    vue: ['vue', 'vue-router'],
+                    echarts: ['echarts', 'vue-echarts'],
+                    apex: ['apexcharts', 'vue3-apexcharts'],
+                    fullcalendar: ['@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/vue3']
+                  }
+                }
+              }
+            }
+          })
+          EOF
+
+          if [ -f package.json ]; then
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));
+              j.devDependencies={...(j.devDependencies||{}), 'rollup-plugin-visualizer':'^5','size-limit':'^11','@size-limit/file':'^11'};
+              j['size-limit']=[{ path:'dist/assets/*.js', limit:'180 kb', gzip:true }];
+              j.scripts={...(j.scripts||{}), analyze:'vite build && npx size-limit && echo \"stats at dist/stats.html\"'};
+              fs.writeFileSync(p, JSON.stringify(j,null,2));
+            "
+          fi
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: build/vite-optimization-budgets
+          title: "build(vite): manualChunks + budgets + visualizer (no public sourcemaps)"
+          commit-message: "build(vite): add manualChunks, size-limit, and visualizer"
+          body: |
+            **Why**
+            - Stable vendor caching; bundle visibility and budgets.
+
+            **What changed**
+            - Vite manualChunks, `size-limit`, visualizer.
+            - Public sourcemaps disabled.
+
+            **DoD**
+            - `npm run analyze` generates `dist/stats.html` and passes budgets.
