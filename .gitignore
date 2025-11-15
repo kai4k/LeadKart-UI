@@ -29,4 +29,8 @@ coverage
 
 *.tsbuildinfo
 
-.early.coverage
+.early.coveragedist/
+node_modules/
+.env.local
+.env.*.local
+src/assets/libs
