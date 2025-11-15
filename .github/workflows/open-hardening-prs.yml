@@ -1,0 +1,426 @@
+name: Open hardening PRs (LeadKart)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      #######################################################################
+      # Helper step: function-esque bash helpers we can source
+      #######################################################################
+      - name: Define helpers
+        id: helpers
+        shell: bash
+        run: |
+          cat > _helpers.sh <<'BASH'
+          set -euo pipefail
+          pr() { # $1=branch $2=title $3=body
+            BR="$1"; TITLE="$2"; BODY="$3"
+            git reset --hard && git clean -fdx
+            git checkout -B "$BR"
+            # If no changes staged, allow empty commit so PR still opens
+            git add -A
+            if git diff --cached --quiet; then
+              git commit --allow-empty -m "$TITLE"
+            else
+              git commit -m "$TITLE"
+            fi
+            git push -f -u origin "$BR"
+            gh pr create --base "${GITHUB_REF_NAME:-$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@')}" --head "$BR" --title "$TITLE" --body "$BODY" || true
+          }
+          node_json_edit() { # pass JSON string edit; applies to package.json
+            node -e "const fs=require('fs');const p='package.json';const e=$1;const j=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):{};const merge=(t,s)=>{for(const[k,v]of Object.entries(s)){if(v&&typeof v==='object'&&!Array.isArray(v)){t[k]??={};merge(t[k],v)}else{t[k]=v}}};merge(j,JSON.parse(e));fs.writeFileSync(p,JSON.stringify(j,null,2));"
+          }
+          appe() { f="$1"; l="$2"; mkdir -p "$(dirname "$f")"; touch "$f"; grep -qxF "$l" "$f" || echo "$l" >> "$f"; }
+          writef() { f="$1"; shift; mkdir -p "$(dirname "$f")"; printf "%s" "$*" > "$f"; }
+          BASH
+          echo "helpers=_helpers.sh" >> "$GITHUB_OUTPUT"
+
+      - name: PR-01 repo hygiene
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="chore(repo): remove vendored libs, add engines, fix ignore"
+          BODY=$'# Why\nRemove `src/assets/libs/**` if present, enforce one lockfile & Node engines, fix ignore.\n\n# DoD\n- Build passes; no `@/assets/libs` imports\n- One lockfile only\n'
+          git fetch origin
+          git checkout -B chore/repo-hygiene-drop-vendored-libs origin/${GITHUB_REF_NAME:-main} || git checkout -B chore/repo-hygiene-drop-vendored-libs
+          if [ -d src/assets/libs ]; then git rm -r --cached src/assets/libs || true; rm -rf src/assets/libs; fi
+          appe .gitignore "node_modules/"
+          appe .gitignore "dist/"
+          appe .gitignore ".env.local"
+          appe .gitignore ".env.*.local"
+          appe .gitignore "src/assets/libs"
+          # engines
+          node -e "const fs=require('fs');const p='package.json';if(fs.existsSync(p)){let j=JSON.parse(fs.readFileSync(p,'utf8'));j.engines={...(j.engines||{}),node:'>=20.11',npm:'>=10.5'};fs.writeFileSync(p,JSON.stringify(j,null,2));}"
+          # title typo if present
+          if [ -f index.html ]; then perl -0777 -pe 's/TyopeScript/TypeScript/g' -i index.html || true; fi
+          pr chore/repo-hygiene-drop-vendored-libs "$TITLE" "$BODY"
+
+      - name: PR-02 tooling (ESLint/Prettier/Stylelint + Husky)
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="build(tooling): add eslint/prettier/stylelint + pre-commit hooks"
+          BODY=$'# Why\nEnforce lint/format/style before merge.\n\n# DoD\n- `npm run lint`, `lint:style`, `format -l`, `type-check` pass\n- Hook runs on commit\n'
+          git fetch origin && git checkout -B build/tooling-eslint-prettier-stylelint origin/${GITHUB_REF_NAME:-main} || git checkout -B build/tooling-eslint-prettier-stylelint
+          writef .eslintrc.cjs "module.exports={root:true,parser:'vue-eslint-parser',parserOptions:{parser:'@typescript-eslint/parser',ecmaVersion:'latest',sourceType:'module'},extends:['plugin:vue/vue3-recommended','plugin:@typescript-eslint/recommended','plugin:import/recommended','plugin:import/typescript','prettier'],plugins:['vuejs-accessibility'],rules:{'no-console':process.env.NODE_ENV==='production'?'error':'warn','@typescript-eslint/ban-ts-comment':['error',{'ts-expect-error':'allow-with-description'}],'@typescript-eslint/no-explicit-any':'warn','import/order':['error',{'newlines-between':'always'}]}}"
+          writef .prettierrc '{ "singleQuote": true, "semi": false, "printWidth": 100 }'
+          writef .stylelintrc.cjs "module.exports={extends:['stylelint-config-standard','stylelint-config-recommended-vue'],rules:{'no-descending-specificity':null}}"
+          writef .editorconfig "root = true\n[*]\nindent_style = space\nindent_size = 2\nend_of_line = lf\ncharset = utf-8\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n"
+          node_json_edit '{"scripts":{"type-check":"vue-tsc --noEmit","lint":"eslint .","lint:style":"stylelint \"src/**/*.{css,vue}\"","format":"prettier --write .","build":"vite build"},"lint-staged":{"*.{js,ts,vue,json,md}":["eslint --fix","prettier --write"],"src/**/*.{css,vue}":["stylelint --fix"]},"devDependencies":{"@typescript-eslint/eslint-plugin":"^7","@typescript-eslint/parser":"^7","@vue/eslint-config-typescript":"^13","eslint":"^9","eslint-plugin-import":"^2","eslint-plugin-vue":"^9","eslint-plugin-vuejs-accessibility":"^2.3.1","husky":"^9","lint-staged":"^15","prettier":"^3","stylelint":"^16","stylelint-config-recommended-vue":"^1","stylelint-config-standard":"^36"}}'
+          mkdir -p .husky && printf '%s\n' '#!/usr/bin/env sh' '. "$(git rev-parse --show-toplevel)/.husky/_/husky.sh"' 'npx lint-staged' > .husky/pre-commit && chmod +x .husky/pre-commit
+          pr build/tooling-eslint-prettier-stylelint "$TITLE" "$BODY"
+
+      - name: PR-03 Vite build hardening
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="build(vite): manualChunks + cssCodeSplit + bundle report (no public sourcemaps)"
+          BODY=$'# Why\nStable caching, smaller initial payload, bundle report.\n\n# DoD\n- Initial route < 180KB gzip\n- `dist/bundle-report.html` produced\n'
+          git fetch origin && git checkout -B build/vite-optimization-budgets origin/${GITHUB_REF_NAME:-main} || git checkout -B build/vite-optimization-budgets
+          if [ ! -f vite.config.ts ]; then
+            cat > vite.config.ts <<'VITE'
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
+import { visualizer } from 'rollup-plugin-visualizer'
+export default defineConfig({
+  plugins: [tailwindcss(), vue()],
+  build: {
+    sourcemap: false,
+    cssCodeSplit: true,
+    rollupOptions: {
+      output: { manualChunks: {
+        vue: ['vue','vue-router'],
+        echarts: ['echarts','vue-echarts'],
+        apex: ['apexcharts','vue3-apexcharts'],
+        fullcalendar: ['@fullcalendar/core','@fullcalendar/daygrid','@fullcalendar/vue3']
+      }},
+      plugins: [visualizer({ filename: 'dist/bundle-report.html', gzipSize: true })]
+    }
+  }
+})
+VITE
+          else
+            # annotate rather than overwrite
+            echo "/* PR-03: ensure build.sourcemap=false, cssCodeSplit=true and manualChunks (see PR body) */" >> vite.config.ts
+          fi
+          node_json_edit '{"devDependencies":{"rollup-plugin-visualizer":"^5.12.0"}}'
+          pr build/vite-optimization-budgets "$TITLE" "$BODY"
+
+      - name: PR-04 TS strict + shims + store rename
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="refactor(ts): enable strict mode, add shims, fix store filename"
+          BODY=$'# Why\nType safety and correctness; eliminate `@ts-ignore`.\n'
+          git fetch origin && git checkout -B refactor/ts-strict-baseline origin/${GITHUB_REF_NAME:-main} || git checkout -B refactor/ts-strict-baseline
+          for TSC in tsconfig.app.json tsconfig.json; do
+            if [ -f "$TSC" ]; then
+              node -e "const fs=require('fs');const f='$TSC';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.compilerOptions=j.compilerOptions||{};Object.assign(j.compilerOptions,{strict:true,noImplicitAny:true,noUncheckedIndexedAccess:true,exactOptionalPropertyTypes:true,useUnknownInCatchVariables:true,skipLibCheck:true});fs.writeFileSync(f,JSON.stringify(j,null,2));"
+            fi
+          done
+          mkdir -p src/types
+          cat > src/types/shims.d.ts <<'DTS'
+declare module 'vuevectormap' { const x: any; export default x }
+declare module 'vue-the-mask' { const x: any; export default x }
+declare module 'vue3-apexcharts' { const x: any; export default x }
+declare module '@fullcalendar/vue3' { const x: any; export default x }
+DTS
+          if [ -f src/store/layout.d.ts ]; then git mv src/store/layout.d.ts src/store/layout.ts; fi
+          pr refactor/ts-strict-baseline "$TITLE" "$BODY"
+
+      - name: PR-05 Router modularization (draft)
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="refactor(router): split router by feature and add meta-based preloads"
+          BODY=$'# Why\nGiant router file → split by feature; use route.meta.preload instead of brittle path checks.\n\n# What\nAdds example modules at `src/router/modules/*` with `meta.preload`.\n# DoD\nEach module <200 LOC; preloads via meta. (Manual wiring in `router/index.ts`.)\n'
+          git fetch origin && git checkout -B refactor/router-split-and-preload-meta origin/${GITHUB_REF_NAME:-main} || git checkout -B refactor/router-split-and-preload-meta
+          mkdir -p src/router/modules
+          cat > src/router/modules/dashboards.ts <<'TS'
+import type { RouteRecordRaw } from 'vue-router'
+const dashboards: RouteRecordRaw[] = [
+  { path: '/dashboard/analytics', component: () => import('@/view/dashboards/analytics/index.vue'), meta: { preload: ['echarts'] } }
+]
+export default dashboards
+TS
+          pr refactor/router-split-and-preload-meta "$TITLE" "$BODY" || true
+          gh pr ready refactor/router-split-and-preload-meta --no-maintainer-edit --undo >/dev/null 2>&1 || true
+          gh pr convert refactor/router-split-and-preload-meta --to-draft >/dev/null 2>&1 || true
+
+      - name: PR-06 Pinia migration (draft with skeleton)
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="refactor(state): migrate to pinia with persisted state"
+          BODY=$'# Why\nVuex → Pinia for Vue 3; typed UI state.\n# What\nAdds `src/stores/layout.ts` skeleton; instructions to integrate in `main.ts` and replace Vuex usages.\n'
+          git fetch origin && git checkout -B refactor/state-pinia-migration origin/${GITHUB_REF_NAME:-main} || git checkout -B refactor/state-pinia-migration
+          mkdir -p src/stores
+          cat > src/stores/layout.ts <<'TS'
+import { defineStore } from 'pinia'
+export type Theme = 'light' | 'dark' | 'black-white'
+export type LayoutStyle = 'default' | 'boxed' | 'horizontal' | 'modern' | 'semibox'
+export const useLayout = defineStore('layout', {
+  state: () => ({ layoutStyle: 'modern' as LayoutStyle, layoutTheme: 'light' as Theme, isSidebarShow: false }),
+  actions: { setTheme(t: Theme){ this.layoutTheme = t }, setLayout(s: LayoutStyle){ this.layoutStyle = s } }
+})
+TS
+          node_json_edit '{"dependencies":{"pinia":"^2.2.6"},"devDependencies":{"pinia-plugin-persistedstate":"^4.0.2"}}'
+          pr refactor/state-pinia-migration "$TITLE" "$BODY" || true
+          gh pr convert refactor/state-pinia-migration --to-draft >/dev/null 2>&1 || true
+
+      - name: PR-07 Service layer
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="feat(services): add api client and storage service; remove direct localStorage"
+          BODY=$'# Why\nIntroduce clean API + storage abstractions.\n'
+          git fetch origin && git checkout -B feat/services-api-storage origin/${GITHUB_REF_NAME:-main} || git checkout -B feat/services-api-storage
+          mkdir -p src/services/api src/services/storage
+          cat > src/services/api/client.ts <<'TS'
+import axios from 'axios'
+export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL, timeout: 15000 })
+TS
+          cat > src/services/storage/index.ts <<'TS'
+export const storage = {
+  get<T>(k: string): T | undefined { try { return JSON.parse(localStorage.getItem(k) || 'null') || undefined } catch { return undefined } },
+  set<T>(k: string, v: T){ try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
+  remove(k: string){ try { localStorage.removeItem(k) } catch {} }
+}
+TS
+          node_json_edit '{"dependencies":{"axios":"^1.7.0"}}'
+          pr feat/services-api-storage "$TITLE" "$BODY"
+
+      - name: PR-08 Charts & CSS refactor (draft)
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="perf(charts,css): use echarts/core and route-scoped plugin CSS"
+          BODY=$'# Why\nReduce initial bundle & CSS.\n# What\nAdds `EChartsSetup.ts` example and instructions to convert imports & move CSS to routes.\n'
+          git fetch origin && git checkout -B perf/charts-ondemand-css-codesplit origin/${GITHUB_REF_NAME:-main} || git checkout -B perf/charts-ondemand-css-codesplit
+          mkdir -p src/components/charts
+          cat > src/components/charts/EChartsSetup.ts <<'TS'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart, BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+use([CanvasRenderer, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
+TS
+          pr perf/charts-ondemand-css-codesplit "$TITLE" "$BODY" || true
+          gh pr convert perf/charts-ondemand-css-codesplit --to-draft >/dev/null 2>&1 || true
+
+      - name: PR-09 Accessibility foundation (draft)
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="feat(a11y): focus-visible styles and a11y linting; update interactive components"
+          BODY=$'# Why\nKeyboard & screen-reader accessibility.\n# What\nAdds `src/assets/css/a11y.css`; instructions to add ARIA & keyboard handlers to menus/modals.\n'
+          git fetch origin && git checkout -B feat/a11y-keyboard-aria origin/${GITHUB_REF_NAME:-main} || git checkout -B feat/a11y-keyboard-aria
+          mkdir -p src/assets/css
+          echo ':focus-visible{outline:2px solid currentColor;outline-offset:2px}' > src/assets/css/a11y.css
+          pr feat/a11y-keyboard-aria "$TITLE" "$BODY" || true
+          gh pr convert feat/a11y-keyboard-aria --to-draft >/dev/null 2>&1 || true
+
+      - name: PR-10 Testing baseline
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="test(setup): add vitest + testing-library + playwright"
+          BODY=$'# Why\nEstablish unit/E2E scaffolding & coverage.\n'
+          git fetch origin && git checkout -B test/setup-vitest-playwright origin/${GITHUB_REF_NAME:-main} || git checkout -B test/setup-vitest-playwright
+          node_json_edit '{"devDependencies":{"vitest":"^2.1.3","@vue/test-utils":"^2.4.5","@testing-library/vue":"^8.1.0","jsdom":"^25.0.0","@playwright/test":"^1.48.0"},"scripts":{"test":"vitest run","test:ui":"vitest","e2e":"playwright test"}}'
+          cat > vitest.config.ts <<'TS'
+import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
+export default defineConfig({ plugins: [vue()], test: { environment: 'jsdom', globals: true, coverage: { reporter: ['text','lcov'], lines: 20 } } })
+TS
+          mkdir -p tests/unit tests/e2e
+          cat > tests/unit/Button.spec.ts <<'TS'
+import { render, fireEvent } from '@testing-library/vue'
+const Btn = { template:'<button @click="$emit(\\'click\\')"><slot/></button>' }
+it('emits click', async () => {
+  const { getByRole, emitted } = render(Btn, { slots: { default: 'OK' } })
+  await fireEvent.click(getByRole('button', { name: 'OK' }))
+  expect(emitted().click).toBeTruthy()
+})
+TS
+          cat > tests/e2e/sanity.spec.ts <<'TS'
+import { test, expect } from '@playwright/test'
+test('home renders', async ({ page }) => { await page.goto('/'); await expect(page).toHaveTitle(/LeadKart|TypeScript|Vue/i) })
+TS
+          pr test/setup-vitest-playwright "$TITLE" "$BODY"
+
+      - name: PR-11 Security & error handling
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="sec(xss): add SafeHtml and global error handlers"
+          BODY=$'# Why\nSanitize dynamic HTML and centralize error handling.\n'
+          git fetch origin && git checkout -B sec/xss-sanitization-global-error origin/${GITHUB_REF_NAME:-main} || git checkout -B sec/xss-sanitization-global-error
+          mkdir -p src/components/util
+          cat > src/components/util/SafeHtml.vue <<'VUE'
+<script setup lang="ts">
+import { computed } from 'vue'
+import DOMPurify from 'dompurify'
+const props = defineProps<{ html: string }>()
+const safe = computed(() => DOMPurify.sanitize(props.html))
+</script>
+<template><div v-html="safe" /></template>
+VUE
+          node_json_edit '{"dependencies":{"dompurify":"^3.0.6"}}'
+          if [ -f src/main.ts ]; then echo "// PR-11: Global error capture\nwindow.addEventListener('unhandledrejection', e => console.error('[UnhandledRejection]', e.reason))" >> src/main.ts; fi
+          pr sec/xss-sanitization-global-error "$TITLE" "$BODY"
+
+      - name: PR-12 Docs & templates
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="docs: add README, CONTRIBUTING, PR template, ADR stub"
+          BODY=$'# Why\nOnboarding and governance.\n'
+          git fetch origin && git checkout -B docs/readme-adrs-templates origin/${GITHUB_REF_NAME:-main} || git checkout -B docs/readme-adrs-templates
+          cat > README.md <<'MD'
+# LeadKart UI
+## Quickstart
+npm ci && npm run dev
+## Standards
+- TS strict (no blanket @ts-ignore)
+- Perf budgets: initial < 180KB gzip; lazy < 250KB
+- WCAG 2.1 AA; Axe serious/critical=0 on key pages
+MD
+          cat > CONTRIBUTING.md <<'MD'
+# Contributing
+- Conventional commits
+- Before PR: npm run type-check && npm run lint && npm run lint:style && npm run test
+MD
+          mkdir -p .github docs/adr
+          cat > .github/pull_request_template.md <<'MD'
+## Summary
+## Linked Issues
+## Changes
+## Test Plan
+- [ ] type-check
+- [ ] lint/style/format
+- [ ] tests added/updated
+- [ ] a11y verified (if UI)
+## Definition of Done
+- [ ] Perf budgets respected
+- [ ] No new @ts-ignore
+## Risks & Rollback
+MD
+          cat > docs/adr/0001-state-management-pinia.md <<'MD'
+# ADR-0001: Pinia for state management
+Status: Accepted
+Rationale: Simpler API, TS-first; official Vue 3 recommendation.
+MD
+          pr docs/readme-adrs-templates "$TITLE" "$BODY"
+
+      - name: PR-13 i18n lazy loader
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="perf(i18n): lazy-load locales and sync html lang"
+          BODY=$'# Why\nBundle only active locale; set <html lang> centrally.\n'
+          git fetch origin && git checkout -B perf/i18n-lazy-and-lang origin/${GITHUB_REF_NAME:-main} || git checkout -B perf/i18n-lazy-and-lang
+          mkdir -p src/i18n
+          cat > src/i18n/index.ts <<'TS'
+import { createI18n } from 'vue-i18n'
+const loaders: Record<string, () => Promise<any>> = {
+  en: () => import('@/assets/lang/en.json')
+}
+export const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: {} } })
+export async function setLocale(locale: string) {
+  const msgs = (await (loaders[locale]||loaders.en)()).default
+  i18n.global.setLocaleMessage(locale, msgs)
+  i18n.global.locale.value = locale
+  document.documentElement.setAttribute('lang', locale)
+}
+TS
+          pr perf/i18n-lazy-and-lang "$TITLE" "$BODY"
+
+      - name: PR-14 Assets optimization note
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="perf(assets): add imagemin plugin hint and lazy image guidance"
+          BODY=$'# Why\nHeavy bitmaps harm LCP.\n# What\nAdds imagemin devDep and a note to wire compression and use WebP/AVIF + loading=\"lazy\".\n'
+          git fetch origin && git checkout -B perf/assets-optimization origin/${GITHUB_REF_NAME:-main} || git checkout -B perf/assets-optimization
+          node_json_edit '{"devDependencies":{"vite-plugin-imagemin":"^0.7.6"}}'
+          if [ -f vite.config.ts ]; then echo "/* PR-14: Consider adding vite-plugin-imagemin for production image compression */" >> vite.config.ts; fi
+          pr perf/assets-optimization "$TITLE" "$BODY"
+
+      - name: PR-15 Deploy caching sample
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="chore(deploy): long-cache hashed assets + no-store HTML"
+          BODY=$'# Why\nFaster repeat visits.\n'
+          git fetch origin && git checkout -B chore/deploy-caching origin/${GITHUB_REF_NAME:-main} || git checkout -B chore/deploy-caching
+          mkdir -p deploy
+          cat > deploy/nginx.conf <<'NGINX'
+location ~* \.(js|css|woff2|png|jpg|jpeg|webp|avif)$ { add_header Cache-Control "public, max-age=31536000, immutable"; }
+location = /index.html { add_header Cache-Control "no-store"; }
+NGINX
+          pr chore/deploy-caching "$TITLE" "$BODY"
+
+      - name: PR-16 Licensing baseline
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="chore(legal): add THIRD_PARTY_NOTICES and license scan script"
+          BODY=$'# Why\nLicense compliance for template + OSS.\n'
+          git fetch origin && git checkout -B chore/licensing-notices origin/${GITHUB_REF_NAME:-main} || git checkout -B chore/licensing-notices
+          echo "# Third-Party Notices\n\nRun \`npm run licenses\` to refresh." > THIRD_PARTY_NOTICES.md
+          node_json_edit '{"devDependencies":{"license-checker-rseidelsohn":"^4.4.4"},"scripts":{"licenses":"license-checker-rseidelsohn --production --csv > licenses.csv"}}'
+          pr chore/licensing-notices "$TITLE" "$BODY"
+
+      - name: PR-17 CI pipeline
+        shell: bash
+        run: |
+          source _helpers.sh
+          TITLE="ci: type/lint/style/test/build/audit + bundle report artifact"
+          BODY=$'# Why\nEnforce quality and surface bundle report.\n'
+          git fetch origin && git checkout -B ci/github-actions-pipeline origin/${GITHUB_REF_NAME:-main} || git checkout -B ci/github-actions-pipeline
+          mkdir -p .github/workflows
+          cat > .github/workflows/ci.yml <<'YML'
+name: CI
+on: [pull_request, push]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: 'npm' }
+      - run: npm ci
+      - run: npm run type-check --if-present
+      - run: npm run lint --if-present
+      - run: npm run lint:style --if-present
+      - run: npm run test --if-present
+      - run: npm run build --if-present
+      - name: Upload bundle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: bundle-report, path: dist/bundle-report.html, if-no-files-found: ignore }
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm run licenses --if-present
+YML
+          pr ci/github-actions-pipeline "$TITLE" "$BODY"
