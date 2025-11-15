@@ -9,7 +9,10 @@
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build --force"
+    "type-check": "vue-tsc --build --force",
+    "lint": "eslint .",
+    "lint:style": "stylelint \"src/**/*.{css,vue}\"",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@fontsource/inter": "^5.1.0",
