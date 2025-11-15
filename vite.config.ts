@@ -1,14 +1,21 @@
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
-import { fileURLToPath, URL } from "node:url";
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
+import { visualizer } from 'rollup-plugin-visualizer'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [tailwindcss(),vue()],
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
-  },
-});
+  plugins: [tailwindcss(), vue(), visualizer({ filename: 'dist/stats.html', open: false })],
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vue: ['vue', 'vue-router'],
+          echarts: ['echarts', 'vue-echarts'],
+          apex: ['apexcharts', 'vue3-apexcharts'],
+          fullcalendar: ['@fullcalendar/core', '@fullcalendar/daygrid', '@fullcalendar/vue3']
+        }
+      }
+    }
+  }
+})
