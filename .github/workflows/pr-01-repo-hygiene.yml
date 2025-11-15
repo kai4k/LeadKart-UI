@@ -1,0 +1,65 @@
+name: PR 01 — Repo hygiene
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr01:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+
+      - name: Apply repo hygiene changes
+        run: |
+          set -euo pipefail
+
+          # 1) .gitignore hygiene
+          touch .gitignore
+          # append lines only if not present
+          add_ignore() { grep -qxF "$1" .gitignore || echo "$1" >> .gitignore; }
+          add_ignore "dist/"
+          add_ignore "node_modules/"
+          add_ignore ".env.local"
+          add_ignore ".env.*.local"
+          add_ignore "src/assets/libs"
+
+          # 2) package.json engines (if package.json exists)
+          if [ -f package.json ]; then
+            node -e "const fs=require('fs'); const p='package.json';
+              const j=JSON.parse(fs.readFileSync(p,'utf8'));
+              j.engines={...(j.engines||{}), node: '>=20.11', npm: '>=10.5'};
+              fs.writeFileSync(p, JSON.stringify(j,null,2));
+            "
+          fi
+
+          # 3) index.html minor title fix (if present)
+          if [ -f index.html ]; then
+            sed -i 's/TyopeScript/TypeScript/g' index.html || true
+          fi
+
+          # 4) remove vendored libs folder if present (safe on Actions runner)
+          if [ -d src/assets/libs ]; then
+            git rm -r -f src/assets/libs || true
+            rm -rf src/assets/libs || true
+          fi
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/repo-hygiene-drop-vendored-libs
+          title: "chore(repo): remove vendored libs from src and standardize package manager"
+          commit-message: "chore(repo): ignore dist/node_modules/envs; add engines; remove vendored libs; fix title"
+          body: |
+            **Why**
+            - Vendor code under `src/assets/libs` defeats tree-shaking & security scanning.
+            - Add Node/NPM engines for reproducible installs.
+            - Ignore patterns + small HTML title fix.
+
+            **DoD**
+            - No imports from `@/assets/libs`.
+            - One lockfile strategy (npm or yarn).
