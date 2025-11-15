@@ -1,0 +1,72 @@
+name: PR 02 — Tooling (ESLint/Prettier/Stylelint)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr02:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add linting/formatting configs and scripts
+        run: |
+          set -euo pipefail
+
+          # Config files
+          cat > .eslintrc.cjs <<'EOF'
+          module.exports = {
+            root: true,
+            parser: 'vue-eslint-parser',
+            parserOptions: { parser: '@typescript-eslint/parser', ecmaVersion: 'latest', sourceType: 'module' },
+            extends: ['plugin:vue/vue3-recommended','plugin:@typescript-eslint/recommended','prettier'],
+            rules: {
+              'no-console': process.env.NODE_ENV === 'production' ? 'error' : 'warn',
+              'import/order': ['warn', { 'newlines-between': 'always' }]
+            }
+          }
+          EOF
+
+          cat > .prettierrc <<'EOF'
+          { "singleQuote": true, "semi": false, "printWidth": 100 }
+          EOF
+
+          cat > .stylelintrc.cjs <<'EOF'
+          module.exports = {
+            extends: ['stylelint-config-standard','stylelint-config-recommended-vue'],
+            rules: { 'no-descending-specificity': null }
+          }
+          EOF
+
+          # Add scripts to package.json if present
+          if [ -f package.json ]; then
+            node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));
+              j.scripts=j.scripts||{};
+              j.scripts['type-check']=j.scripts['type-check']||'vue-tsc --noEmit';
+              j.scripts['lint']=j.scripts['lint']||'eslint .';
+              j.scripts['lint:style']=j.scripts['lint:style']||'stylelint \"src/**/*.{css,vue}\"';
+              j.scripts['format']=j.scripts['format']||'prettier --write .';
+              fs.writeFileSync(p, JSON.stringify(j,null,2));
+            "
+          fi
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: build/tooling-eslint-prettier-stylelint
+          title: "build(tooling): add eslint/prettier/stylelint configs"
+          commit-message: "build(tooling): add eslint/prettier/stylelint configs + scripts"
+          body: |
+            **Why**
+            - Baseline code quality and formatting enforced in CI.
+
+            **What changed**
+            - ESLint/Prettier/Stylelint configs.
+            - Scripts: `type-check`, `lint`, `lint:style`, `format`.
+
+            **DoD**
+            - CI can run lint/format/type-check on PRs.
